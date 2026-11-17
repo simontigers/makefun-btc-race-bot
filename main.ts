@@ -6,7 +6,9 @@
 // (120 bars) -- both trends pointing up. Once in, it holds unless the position
 // falls to 98% of its cost (a 2% disaster stop), in which case it sells
 // everything and never re-enters. If it is still flat with one hour left
-// (batch 1380), it buys anyway so the entry always makes at least one trade.
+// (batch 1380), it buys if the short-term trend is not down, so it does not
+// buy into a crash; with 20 minutes left (batch 1420) it buys anyway, so the
+// entry always makes at least one trade.
 // No re-entry keeps fees low: a full-size round trip costs about 26 bps in
 // fee, slippage and price impact, and on the dev window every faster,
 // multi-trade rule lost money to whipsaw (the kit's EMA 8/21 baseline lost
@@ -31,8 +33,10 @@ const SLOW_SPAN = 120;
 /** Sell everything if the position is worth at most this share of its cost. */
 const STOP_NUM = 98n;
 const STOP_DEN = 100n;
-/** With one hour of the 1,440-bar window left, buy anyway if still flat. */
+/** With one hour of the 1,440-bar window left, buy if the short-term trend is not down. */
 const FALLBACK_BAR = 1380;
+/** With 20 minutes left, buy anyway if still flat, so the entry always trades. */
+const LATE_BAR = 1420;
 const MAX_SLIPPAGE_BPS = 100;
 
 /** One EMA over closes, seeded as the mean of its first span, like the baselines. */
@@ -78,7 +82,8 @@ await runBars({
     }
     if (sold) return [];
     const buy: BuyInput = { side: 'buy', symbol: SYMBOL, notional_quote_units: state.cash, max_slippage_bps: MAX_SLIPPAGE_BPS };
-    if (state.seq >= FALLBACK_BAR) return [buy];
+    if (state.seq >= LATE_BAR) return [buy];
+    if (state.seq >= FALLBACK_BAR && fast.value !== null && lastClose !== null && lastClose > fast.value) return [buy];
     if (fast.value !== null && slow.value !== null && lastClose !== null
       && lastClose > fast.value && lastClose > slow.value) {
       return [buy];
